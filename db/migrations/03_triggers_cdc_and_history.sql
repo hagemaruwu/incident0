@@ -1,37 +1,20 @@
 -- ============================================================================
--- INCIDENTZERO: 03_triggers_cdc_and_history.sql
+-- INCIDENTZERO: 03_triggers_cdc_and_history.sql (FIXED & REFINED)
 -- Advanced Database Feature: Automated State Machine & CDC Triggers
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- TRIGGER 1: Incident Status Timeline & Automatic Timestamping
+-- 1. BEFORE TRIGGER: Automatically stamp timestamps on incidents
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION fn_trg_incident_status_update()
+CREATE OR REPLACE FUNCTION fn_trg_incident_timestamps()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
-DECLARE
-    v_actor_id INT;
 BEGIN
-    -- Extract actor from transaction session context (if set via API), fallback to assigned_to
-    v_actor_id := COALESCE(
-        NULLIF(current_setting('incidentzero.current_user_id', true), '')::INT,
-        NEW.assigned_to
-    );
-
     NEW.updated_at := NOW();
 
-    -- CASE 1: New incident declaration
-    IF (TG_OP = 'INSERT') THEN
-        INSERT INTO incident_status_history (
-            incident_id, previous_status, new_status, changed_by, changed_at, notes
-        ) VALUES (
-            NEW.incident_id, NULL, NEW.status, v_actor_id, NOW(), 'Incident declared in system.'
-        );
-
-    -- CASE 2: Status transition on existing incident
-    ELSIF (TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status) THEN
-        -- Auto-stamp timestamps based on lifecycle stage
+    -- Automatically stamp mitigated_at / resolved_at on status changes
+    IF (TG_OP = 'UPDATE') THEN
         IF (NEW.status = 'MITIGATED' AND OLD.mitigated_at IS NULL) THEN
             NEW.mitigated_at := NOW();
         END IF;
@@ -39,8 +22,41 @@ BEGIN
         IF (NEW.status IN ('RESOLVED', 'CLOSED') AND OLD.resolved_at IS NULL) THEN
             NEW.resolved_at := NOW();
         END IF;
+    END IF;
 
-        -- Record the transition in history table
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_incident_timestamps ON incidents;
+CREATE TRIGGER trg_incident_timestamps
+BEFORE INSERT OR UPDATE ON incidents
+FOR EACH ROW
+EXECUTE FUNCTION fn_trg_incident_timestamps();
+
+-- ----------------------------------------------------------------------------
+-- 2. AFTER TRIGGER: Insert into incident_status_history (Parent exists!)
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_trg_incident_status_history()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_actor_id INT;
+BEGIN
+    v_actor_id := COALESCE(
+        NULLIF(current_setting('incidentzero.current_user_id', true), '')::INT,
+        NEW.assigned_to
+    );
+
+    IF (TG_OP = 'INSERT') THEN
+        INSERT INTO incident_status_history (
+            incident_id, previous_status, new_status, changed_by, changed_at, notes
+        ) VALUES (
+            NEW.incident_id, NULL, NEW.status, v_actor_id, NOW(), 'Incident declared in system.'
+        );
+
+    ELSIF (TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status) THEN
         INSERT INTO incident_status_history (
             incident_id, previous_status, new_status, changed_by, changed_at, notes
         ) VALUES (
@@ -54,13 +70,14 @@ END;
 $$;
 
 DROP TRIGGER IF EXISTS trg_incident_status_update ON incidents;
-CREATE TRIGGER trg_incident_status_update
-BEFORE INSERT OR UPDATE ON incidents
+DROP TRIGGER IF EXISTS trg_incident_status_history ON incidents;
+CREATE TRIGGER trg_incident_status_history
+AFTER INSERT OR UPDATE ON incidents
 FOR EACH ROW
-EXECUTE FUNCTION fn_trg_incident_status_update();
+EXECUTE FUNCTION fn_trg_incident_status_history();
 
 -- ----------------------------------------------------------------------------
--- TRIGGER 2: Generic Change Data Capture (CDC) Audit Trigger
+-- 3. AFTER TRIGGER: Generic Change Data Capture (CDC) Audit Trigger
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_trg_generic_audit_trail()
 RETURNS TRIGGER
@@ -88,7 +105,6 @@ BEGIN
             (to_jsonb(NEW)->>'service_id')::BIGINT,
             0
         );
-        -- Only record audit log if actual data payload changed
         IF to_jsonb(OLD) IS DISTINCT FROM to_jsonb(NEW) THEN
             INSERT INTO audit_logs (table_name, record_id, action, changed_by, changed_at, old_values, new_values)
             VALUES (TG_TABLE_NAME, v_record_id, 'UPDATE', v_actor_id, NOW(), to_jsonb(OLD), to_jsonb(NEW));
@@ -110,7 +126,6 @@ BEGIN
 END;
 $$;
 
--- Attach CDC Audit Trigger to core tables
 DROP TRIGGER IF EXISTS trg_audit_incidents ON incidents;
 CREATE TRIGGER trg_audit_incidents
 AFTER INSERT OR UPDATE OR DELETE ON incidents
