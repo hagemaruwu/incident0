@@ -6,15 +6,7 @@ module.exports = {
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
-    extend: {
-      colors: {
-        obsidian: {
-          900: "#090D16",
-          800: "#0F172A",
-          700: "#1E293B",
-        },
-      },
-    },
+    extend: {},
   },
   plugins: [],
 };

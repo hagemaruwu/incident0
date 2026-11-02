@@ -2,17 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  AlertTriangle, 
-  CheckCircle2, 
-  Clock, 
-  Activity, 
-  Server, 
-  ArrowUpRight, 
-  ShieldAlert, 
-  Users,
-  RefreshCw
-} from 'lucide-react';
 
 interface Incident {
   incident_id: number;
@@ -29,20 +18,44 @@ interface Incident {
   impact_radius_users: number;
 }
 
+type Filter = 'ALL' | 'ACTIVE' | 'P1' | 'P2' | 'RESOLVED';
+
+const STATUS_OPTS = ['OPEN', 'INVESTIGATING', 'MITIGATED', 'RESOLVED'] as const;
+
+const SEV_STYLE: Record<string, { color: string; bg: string; border: string }> = {
+  P1: { color: '#FCA5A5', bg: 'var(--accent-red-dim)',   border: 'var(--accent-red)' },
+  P2: { color: '#FCD34D', bg: 'var(--accent-amber-dim)', border: 'var(--accent-amber)' },
+  P3: { color: '#93C5FD', bg: '#1E3A5F',                 border: '#2563EB' },
+  P4: { color: 'var(--text-secondary)', bg: 'var(--bg-raised)', border: 'var(--border-strong)' },
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  OPEN:          'var(--accent-red)',
+  INVESTIGATING: 'var(--accent-amber)',
+  MITIGATED:     '#38BDF8',
+  RESOLVED:      'var(--accent-emerald)',
+  CLOSED:        'var(--text-muted)',
+};
+
+function kpiSub(label: string, color?: string) {
+  return (
+    <span className="font-mono text-xs" style={{ color: color ?? 'var(--text-muted)' }}>
+      {label}
+    </span>
+  );
+}
+
 export default function WarRoomDashboard() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'ALL' | 'P1' | 'P2' | 'ACTIVE' | 'RESOLVED'>('ALL');
+  const [loading, setLoading]     = useState(true);
+  const [filter, setFilter]       = useState<Filter>('ALL');
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
-  // Fetch incidents from our Day 8 API
   async function fetchIncidents() {
     try {
-      const res = await fetch('/api/incidents');
+      const res  = await fetch('/api/incidents');
       const data = await res.json();
-      if (data.status === 'SUCCESS') {
-        setIncidents(data.incidents);
-      }
+      if (data.status === 'SUCCESS') setIncidents(data.incidents);
     } catch (err) {
       console.error('Failed to load incidents', err);
     } finally {
@@ -50,22 +63,17 @@ export default function WarRoomDashboard() {
     }
   }
 
-  useEffect(() => {
-    fetchIncidents();
-  }, []);
+  useEffect(() => { fetchIncidents(); }, []);
 
-  // Quick Status Transition (Calls PATCH /api/incidents/[id] and fires triggers!)
-  async function handleStatusChange(incidentId: number, newStatus: string) {
-    setUpdatingId(incidentId);
+  async function handleStatusChange(id: number, newStatus: string) {
+    setUpdatingId(id);
     try {
-      const res = await fetch(`/api/incidents/${incidentId}`, {
+      const res = await fetch(`/api/incidents/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        await fetchIncidents(); // Refresh state immediately
-      }
+      if (res.ok) await fetchIncidents();
     } catch (err) {
       console.error('Status transition failed', err);
     } finally {
@@ -73,236 +81,279 @@ export default function WarRoomDashboard() {
     }
   }
 
-  // SRE KPI Calculations
-  const activeIncidents = incidents.filter(i => ['OPEN', 'INVESTIGATING'].includes(i.status));
-  const p1Outages = incidents.filter(i => i.severity === 'P1' && ['OPEN', 'INVESTIGATING'].includes(i.status));
-  const resolvedCount = incidents.filter(i => ['RESOLVED', 'CLOSED'].includes(i.status)).length;
+  const active   = incidents.filter(i => ['OPEN', 'INVESTIGATING'].includes(i.status));
+  const p1Active = incidents.filter(i => i.severity === 'P1' && ['OPEN', 'INVESTIGATING'].includes(i.status));
+  const resolved = incidents.filter(i => ['RESOLVED', 'CLOSED'].includes(i.status));
 
-  // Filtered incidents for display
-  const displayedIncidents = incidents.filter(i => {
-    if (filter === 'P1') return i.severity === 'P1';
-    if (filter === 'P2') return i.severity === 'P2';
-    if (filter === 'ACTIVE') return ['OPEN', 'INVESTIGATING'].includes(i.status);
+  const displayed = incidents.filter(i => {
+    if (filter === 'P1')      return i.severity === 'P1';
+    if (filter === 'P2')      return i.severity === 'P2';
+    if (filter === 'ACTIVE')  return ['OPEN', 'INVESTIGATING'].includes(i.status);
     if (filter === 'RESOLVED') return ['RESOLVED', 'CLOSED'].includes(i.status);
     return true;
   });
 
+  const FILTERS: { key: Filter; label: string }[] = [
+    { key: 'ALL',      label: 'ALL' },
+    { key: 'ACTIVE',   label: 'ACTIVE' },
+    { key: 'P1',       label: 'P1' },
+    { key: 'P2',       label: 'P2' },
+    { key: 'RESOLVED', label: 'RESOLVED' },
+  ];
+
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      
-      {/* Page Title & Refresh */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <main className="max-w-[1280px] mx-auto px-6 py-8">
+
+      {/* Page header */}
+      <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
-            <span>Live SRE War Room</span>
-            <span className="px-2 py-0.5 rounded text-xs font-mono bg-red-500/10 text-red-400 border border-red-500/20">
+          <h1 className="text-[28px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>
+            Live SRE War Room{' '}
+            <span
+              className="align-middle font-mono text-[11px] font-medium px-2 py-0.5 ml-2"
+              style={{
+                color: 'var(--accent-red)',
+                backgroundColor: 'var(--accent-red-dim)',
+                border: '1px solid var(--accent-red)',
+                borderRadius: '2px',
+                letterSpacing: '0.08em',
+              }}
+            >
               PRODUCTION
             </span>
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Real-time incident state machine & root-cause correlation stream.
+          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)', maxWidth: '65ch' }}>
+            Incident state machine and root-cause correlation stream.
           </p>
         </div>
         <button
           onClick={fetchIncidents}
-          className="inline-flex items-center space-x-2 px-3 py-2 rounded-md bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition"
+          className="text-xs font-medium px-3 py-1.5 rounded transition"
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-secondary)',
+          }}
         >
-          <RefreshCw className="h-3.5 w-3.5" />
-          <span>Refresh Feed</span>
+          Refresh Feed
         </button>
       </div>
 
-      {/* SRE Telemetry KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* KPI 1: Active Incidents */}
-        <div className="bg-[#0B0F19] border border-slate-800 rounded-lg p-5">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs uppercase font-medium tracking-wider">Active Incidents</span>
-            <Activity className="h-4 w-4 text-amber-400" />
+      {/* KPI strip */}
+      <div
+        className="grid grid-cols-2 lg:grid-cols-4 mb-8"
+        style={{ border: '1px solid var(--border)', borderRadius: '4px', overflow: 'hidden' }}
+      >
+        {[
+          {
+            label: 'ACTIVE INCIDENTS',
+            value: active.length,
+            sub: kpiSub('Under Triage', active.length > 0 ? 'var(--accent-amber)' : 'var(--text-muted)'),
+          },
+          {
+            label: 'P1 CRITICAL OUTAGES',
+            value: p1Active.length,
+            sub: kpiSub(p1Active.length > 0 ? 'Severe Impact' : 'All Clear', p1Active.length > 0 ? 'var(--accent-red)' : 'var(--accent-emerald)'),
+          },
+          {
+            label: 'MEAN TIME TO RESOLVE',
+            value: '45m',
+            sub: kpiSub(`${resolved.length} Post-Mortems`),
+          },
+          {
+            label: 'OVERALL PLATFORM SLA',
+            value: '99.94%',
+            sub: kpiSub('Target 99.90%', 'var(--accent-emerald)'),
+          },
+        ].map((kpi, i, arr) => (
+          <div
+            key={kpi.label}
+            className="p-5"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderRight: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+            }}
+          >
+            <div
+              className="text-[11px] font-medium mb-3"
+              style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}
+            >
+              {kpi.label}
+            </div>
+            <div className="text-[28px] font-bold leading-none mb-1" style={{ color: 'var(--text-primary)' }}>
+              {kpi.value}
+            </div>
+            {kpi.sub}
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-extrabold text-white">{activeIncidents.length}</span>
-            <span className="text-xs text-amber-400 font-medium">Under Triage</span>
-          </div>
-        </div>
-
-        {/* KPI 2: P1 Outages */}
-        <div className="bg-[#0B0F19] border border-slate-800 rounded-lg p-5">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs uppercase font-medium tracking-wider">P1 Critical Outages</span>
-            <ShieldAlert className="h-4 w-4 text-red-500" />
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-extrabold text-red-400">{p1Outages.length}</span>
-            <span className="text-xs text-red-400 font-medium">Severe Impact</span>
-          </div>
-        </div>
-
-        {/* KPI 3: MTTR Benchmark */}
-        <div className="bg-[#0B0F19] border border-slate-800 rounded-lg p-5">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs uppercase font-medium tracking-wider">Mean Time to Resolve</span>
-            <Clock className="h-4 w-4 text-emerald-400" />
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-extrabold text-white">45m</span>
-            <span className="text-xs text-emerald-400 font-medium">{resolvedCount} Post-Mortems</span>
-          </div>
-        </div>
-
-        {/* KPI 4: Infrastructure SLA Target */}
-        <div className="bg-[#0B0F19] border border-slate-800 rounded-lg p-5">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs uppercase font-medium tracking-wider">Overall Platform SLA</span>
-            <Server className="h-4 w-4 text-sky-400" />
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-extrabold text-white">99.94%</span>
-            <span className="text-xs text-sky-400 font-medium">Target 99.90%</span>
-          </div>
-        </div>
-
+        ))}
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-        {(['ALL', 'ACTIVE', 'P1', 'P2', 'RESOLVED'] as const).map((tab) => (
+      {/* Filter row */}
+      <div
+        className="flex items-center gap-0 mb-0"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
+        {FILTERS.map(f => (
           <button
-            key={tab}
-            onClick={() => setFilter(tab)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-              filter === tab
-                ? 'bg-slate-700 text-white font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-            }`}
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className="relative px-4 py-2.5 text-xs font-medium transition-colors"
+            style={{
+              color: filter === f.key ? 'var(--text-primary)' : 'var(--text-secondary)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+            }}
           >
-            {tab}
+            {f.label}
+            {filter === f.key && (
+              <span
+                className="absolute bottom-0 left-0 right-0"
+                style={{ height: '2px', backgroundColor: 'var(--accent-blue)' }}
+              />
+            )}
           </button>
         ))}
-        <span className="text-xs text-slate-500 ml-auto font-mono">
-          Showing {displayedIncidents.length} of {incidents.length} incidents
+        <span
+          className="ml-auto font-mono text-xs pr-4"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          {displayed.length} of {incidents.length} incidents
         </span>
       </div>
 
-      {/* Incident Cards Feed */}
+      {/* Incident feed */}
       {loading ? (
-        <div className="text-center py-16 text-slate-400 font-mono text-sm">
-          Loading live telemetry feed from PostgreSQL...
+        <div className="py-16 text-center font-mono text-sm" style={{ color: 'var(--text-muted)' }}>
+          Loading from PostgreSQL...
         </div>
-      ) : displayedIncidents.length === 0 ? (
-        <div className="text-center py-16 text-slate-500 font-mono text-sm bg-slate-900/40 rounded-lg border border-slate-800">
-          No incidents matching filter "{filter}".
+      ) : displayed.length === 0 ? (
+        <div className="py-16 text-center font-mono text-sm" style={{ color: 'var(--text-muted)' }}>
+          No incidents match this filter.
         </div>
       ) : (
-        <div className="space-y-3">
-          {displayedIncidents.map((inc) => {
-            const isP1 = inc.severity === 'P1';
+        <div>
+          {displayed.map(inc => {
+            const sev  = SEV_STYLE[inc.severity] ?? SEV_STYLE.P4;
             const isResolved = ['RESOLVED', 'CLOSED'].includes(inc.status);
 
             return (
               <div
                 key={inc.incident_id}
-                className={`bg-[#0B0F19] border rounded-lg p-5 transition hover:border-slate-700 ${
-                  isP1 && !isResolved
-                    ? 'border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.1)]'
-                    : 'border-slate-800'
-                }`}
+                className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-4 px-0 transition-colors"
+                style={{
+                  borderBottom: '1px solid var(--border)',
+                  backgroundColor: 'transparent',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-raised)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  
-                  {/* Left: Metadata & Title */}
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex items-center space-x-3 text-xs">
-                      {/* Incident Number */}
-                      <span className="font-mono font-bold text-slate-300">
-                        {inc.incident_number}
-                      </span>
+                {/* Left: meta + title */}
+                <div className="flex-1 min-w-0 px-1">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    {/* Severity badge */}
+                    <span
+                      className="font-mono text-[9px] font-bold px-1.5 py-0.5"
+                      style={{
+                        color: sev.color,
+                        backgroundColor: sev.bg,
+                        border: `1px solid ${sev.border}`,
+                        borderRadius: '2px',
+                        letterSpacing: '0.06em',
+                      }}
+                    >
+                      {inc.severity}
+                    </span>
 
-                      {/* Severity Badge */}
-                      <span
-                        className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${
-                          inc.severity === 'P1'
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            : inc.severity === 'P2'
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        }`}
-                      >
-                        {inc.severity}
-                      </span>
+                    {/* INC number */}
+                    <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {inc.incident_number}
+                    </span>
 
-                      {/* Service & Tier */}
-                      <span className="text-slate-400 flex items-center space-x-1">
-                        <Server className="h-3 w-3 inline text-slate-500" />
-                        <span className="text-slate-300">{inc.service_name}</span>
-                        <span className="text-slate-500 text-[10px]">({inc.service_tier})</span>
-                      </span>
+                    {/* Service tag */}
+                    <span
+                      className="text-[11px] font-medium px-1.5 py-0.5"
+                      style={{
+                        color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-strong)',
+                        borderRadius: '2px',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      {inc.service_name}
+                    </span>
 
-                      {/* Users Impacted */}
-                      <span className="text-slate-500 flex items-center space-x-1">
-                        <Users className="h-3 w-3 inline" />
-                        <span>{inc.impact_radius_users.toLocaleString()} users</span>
-                      </span>
-                    </div>
+                    {/* Tier */}
+                    <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
+                      {inc.service_tier}
+                    </span>
 
-                    {/* Incident Title */}
-                    <h3 className="text-base font-semibold text-white">
-                      {inc.title}
-                    </h3>
-                    <p className="text-xs text-slate-400 line-clamp-1">
-                      {inc.description}
-                    </p>
+                    {/* Impact */}
+                    <span className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      {inc.impact_radius_users.toLocaleString()} users
+                    </span>
                   </div>
 
-                  {/* Right: Assigned Engineer & Trigger Status Action */}
-                  <div className="flex items-center space-x-4 self-end lg:self-center">
-                    
-                    <div className="text-right hidden sm:block">
-                      <div className="text-xs text-slate-400">Commander</div>
-                      <div className="text-xs font-medium text-slate-200">
-                        {inc.assigned_engineer}
-                      </div>
+                  <p
+                    className="text-sm font-semibold leading-snug mb-0.5"
+                    style={{
+                      color: isResolved ? 'var(--text-secondary)' : 'var(--text-primary)',
+                      maxWidth: '65ch',
+                    }}
+                  >
+                    {inc.title}
+                  </p>
+                  <p className="text-xs leading-snug" style={{ color: 'var(--text-secondary)', maxWidth: '65ch' }}>
+                    {inc.description}
+                  </p>
+                </div>
+
+                {/* Right: commander + status + arrow */}
+                <div className="flex items-center gap-5 shrink-0 px-1">
+                  <div className="hidden sm:block text-right">
+                    <div className="text-[11px] uppercase" style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+                      Commander
                     </div>
-
-                    {/* Real-time Status Dropdown that fires Triggers */}
-                    <select
-                      value={inc.status}
-                      disabled={updatingId === inc.incident_id}
-                      onChange={(e) => handleStatusChange(inc.incident_id, e.target.value)}
-                      className={`text-xs font-semibold px-3 py-1.5 rounded border bg-slate-900 cursor-pointer focus:outline-none focus:ring-1 focus:ring-red-500 ${
-                        inc.status === 'OPEN'
-                          ? 'text-red-400 border-red-500/40'
-                          : inc.status === 'INVESTIGATING'
-                          ? 'text-amber-400 border-amber-500/40'
-                          : inc.status === 'MITIGATED'
-                          ? 'text-sky-400 border-sky-500/40'
-                          : 'text-emerald-400 border-emerald-500/40'
-                      }`}
-                    >
-                      <option value="OPEN">OPEN</option>
-                      <option value="INVESTIGATING">INVESTIGATING</option>
-                      <option value="MITIGATED">MITIGATED</option>
-                      <option value="RESOLVED">RESOLVED</option>
-                    </select>
-
-                    <Link
-                      href={`/incidents/${inc.incident_id}`}
-                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition"
-                      title="Inspect Incident Post-Mortem"
-                    >
-                      <ArrowUpRight className="h-4 w-4" />
-                    </Link>
-
+                    <div className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                      {inc.assigned_engineer}
+                    </div>
                   </div>
 
+                  {/* Status dropdown */}
+                  <select
+                    value={inc.status}
+                    disabled={updatingId === inc.incident_id}
+                    onChange={e => handleStatusChange(inc.incident_id, e.target.value)}
+                    className="text-xs font-mono font-semibold px-2 py-1.5 appearance-none cursor-pointer outline-none transition"
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '2px',
+                      color: STATUS_COLOR[inc.status] ?? 'var(--text-primary)',
+                    }}
+                  >
+                    {STATUS_OPTS.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+
+                  {/* Arrow glyph link */}
+                  <Link
+                    href={`/incidents/${inc.incident_id}`}
+                    className="text-sm transition"
+                    style={{ color: 'var(--text-muted)' }}
+                    onMouseEnter={e => ((e.target as HTMLElement).style.color = 'var(--text-primary)')}
+                    onMouseLeave={e => ((e.target as HTMLElement).style.color = 'var(--text-muted)')}
+                    title="Inspect post-mortem"
+                  >
+                    &rarr;
+                  </Link>
                 </div>
               </div>
             );
           })}
         </div>
       )}
-
     </main>
   );
 }

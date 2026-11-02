@@ -2,80 +2,98 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Activity,
-  Radio,
-  PlusCircle,
-  Server,
-  Terminal,
-  Shield,
-} from "lucide-react";
+
+const NAV_LINKS = [
+  { name: "War Room",          href: "/" },
+  { name: "AI Triage Studio",  href: "/incidents/new" },
+  { name: "Service Topology",  href: "/services" },
+  { name: "SQL Evaluation Lab", href: "/evaluation" },
+];
 
 export default function Navbar() {
   const pathname = usePathname();
 
-  const navLinks = [
-    { name: "War Room", href: "/", icon: Activity },
-    { name: "AI Triage Studio", href: "/incidents/new", icon: PlusCircle },
-    { name: "Service Topology", href: "/services", icon: Server },
-    { name: "SQL Evaluation Lab", href: "/evaluation", icon: Terminal },
-  ];
-
   return (
-    <header className="border-b border-slate-800 bg-[#0B0F19]/80 backdrop-blur sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo & Status Indicator */}
-          <div className="flex items-center space-x-6">
-            <Link href="/" className="flex items-center space-x-2">
-              <span className="flex h-3 w-3 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-              </span>
-              <span className="font-extrabold text-xl tracking-wider text-white">
-                INCIDENT<span className="text-red-500">ZERO</span>
-              </span>
-            </Link>
-
-            {/* Navigation Tabs */}
-            <nav className="hidden md:flex space-x-1">
-              {navLinks.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition ${
-                      isActive
-                        ? "bg-slate-800 text-white"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{item.name}</span>
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* SRE Role Badge (Demonstrating RBAC to Evaluators) */}
-          <div className="flex items-center space-x-4">
-            <div className="hidden sm:flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs">
-              <Shield className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-slate-400">Role:</span>
-              <span className="font-semibold text-emerald-400">COMMANDER</span>
-            </div>
-
-            <Link
-              href="/incidents/new"
-              className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-red-600 hover:bg-red-500 text-white transition shadow-sm"
+    <header
+      className="sticky top-0 z-50"
+      style={{
+        backgroundColor: 'var(--bg-base)',
+        borderBottom: '1px solid var(--border)',
+        height: '48px',
+      }}
+    >
+      <div
+        className="max-w-[1280px] mx-auto px-6 h-full flex items-center justify-between"
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2 shrink-0">
+            <span
+              className="inline-block w-2 h-2"
+              style={{ backgroundColor: 'var(--accent-red)' }}
+            />
+            <span
+              className="text-sm font-bold tracking-widest"
+              style={{ color: 'var(--text-primary)', letterSpacing: '0.12em' }}
             >
-              <Radio className="h-3.5 w-3.5" />
-              <span>Declare Incident</span>
-            </Link>
+              INCIDENT<span style={{ color: 'var(--accent-red)' }}>ZERO</span>
+            </span>
+          </Link>
+
+          {/* Nav tabs */}
+          <nav className="hidden md:flex items-end h-full gap-0">
+            {NAV_LINKS.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="relative flex items-center px-3 text-xs font-medium transition-colors"
+                  style={{
+                    height: '48px',
+                    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {link.name}
+                  {isActive && (
+                    <span
+                      className="absolute bottom-0 left-0 right-0"
+                      style={{ height: '2px', backgroundColor: 'var(--accent-blue)' }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Right: Role tag + CTA */}
+        <div className="flex items-center gap-4">
+          {/* RBAC tag — left border, no pill */}
+          <div
+            className="hidden sm:flex items-center gap-2 pl-3 text-xs"
+            style={{ borderLeft: '2px solid var(--accent-emerald)' }}
+          >
+            <span style={{ color: 'var(--text-muted)' }}>Role</span>
+            <span
+              className="font-mono font-semibold"
+              style={{ color: 'var(--accent-emerald)' }}
+            >
+              COMMANDER
+            </span>
           </div>
+
+          {/* Declare Incident — flat rect, no pill */}
+          <Link
+            href="/incidents/new"
+            className="text-xs font-semibold px-3 py-1.5 rounded transition"
+            style={{
+              backgroundColor: 'var(--accent-red)',
+              color: '#fff',
+            }}
+          >
+            Declare Incident
+          </Link>
         </div>
       </div>
     </header>
