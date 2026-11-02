@@ -63,6 +63,18 @@ BEGIN
             NEW.incident_id, OLD.status, NEW.status, v_actor_id, NOW(),
             FORMAT('State transition: %s -> %s', OLD.status, NEW.status)
         );
+
+        -- Autonomous Service Reconciliation: if all active outages cleared, restore OPERATIONAL
+        IF (NEW.status IN ('RESOLVED', 'CLOSED')) THEN
+            IF NOT EXISTS (
+                SELECT 1 FROM incidents 
+                WHERE service_id = NEW.service_id 
+                  AND status IN ('OPEN', 'INVESTIGATING', 'MITIGATED')
+                  AND incident_id <> NEW.incident_id
+            ) THEN
+                UPDATE services SET status = 'OPERATIONAL' WHERE service_id = NEW.service_id;
+            END IF;
+        END IF;
     END IF;
 
     RETURN NEW;

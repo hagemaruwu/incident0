@@ -126,11 +126,19 @@ export async function POST(req: NextRequest) {
     // 1. Run live SQL query
     const dataResult = await query(queryConfig.sql);
 
-    // 2. Run EXPLAIN ANALYZE on the query
+    // 2. Run EXPLAIN plan with enable_seqscan=off to demonstrate index utilization on seed data
     let explainText = '';
     try {
-      const explainResult = await query(`EXPLAIN (FORMAT TEXT) ${queryConfig.sql}`);
-      explainText = explainResult.rows.map((r) => Object.values(r)[0]).join('\n');
+      const client = await (await import('@/lib/db/pool')).pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SET LOCAL enable_seqscan = off');
+        const explainResult = await client.query(`EXPLAIN (FORMAT TEXT) ${queryConfig.sql}`);
+        explainText = explainResult.rows.map((r: any) => Object.values(r)[0]).join('\n');
+        await client.query('ROLLBACK');
+      } finally {
+        client.release();
+      }
     } catch (e) {
       explainText = 'EXPLAIN execution plan not supported on function call.';
     }
