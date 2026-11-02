@@ -112,6 +112,23 @@ SELECT service_name, tier, hop_depth, cascade_risk_score, traversal_path
 FROM fn_compute_blast_radius(1);
     `.trim(),
   },
+  MATERIALIZED_VIEW: {
+    title: 'Concurrent Materialized View (OLAP Isolation)',
+    category: 'Materialized Views',
+    description: 'Pre-computes 30-day MTTR, P95 latency, and SLA availability percentages off the hot transactional path.',
+    sql: `
+SELECT 
+    service_name,
+    service_tier,
+    total_incidents_30d,
+    critical_incidents_30d,
+    active_incidents_30d,
+    avg_mttr_minutes_30d,
+    availability_pct_30d
+FROM mv_service_incident_summary
+ORDER BY critical_incidents_30d DESC, availability_pct_30d ASC;
+    `.trim(),
+  },
 };
 
 export async function POST(req: NextRequest) {

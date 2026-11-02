@@ -153,15 +153,26 @@ WITH RECURSIVE blast_radius_dag AS (
     WHERE NOT (ds.service_id = ANY(dag.traversal_path)) -- Cycle prevention guard
       AND dag.hop_depth < 5
 )
+-- 5. Return collapsed canonical records per downstream service (Max Risk, Shortest Hop, Critical Path)
 SELECT 
-    d.service_id,
-    d.service_name,
-    d.tier,
-    d.hop_depth,
-    d.cascade_risk_score,
-    d.traversal_path
-FROM blast_radius_dag d
-ORDER BY d.cascade_risk_score DESC, d.hop_depth ASC;
+    sub.service_id,
+    sub.service_name,
+    sub.tier,
+    sub.hop_depth,
+    sub.cascade_risk_score,
+    sub.traversal_path
+FROM (
+    SELECT DISTINCT ON (d.service_id)
+        d.service_id,
+        d.service_name,
+        d.tier,
+        d.hop_depth,
+        d.cascade_risk_score,
+        d.traversal_path
+    FROM blast_radius_dag d
+    ORDER BY d.service_id, d.cascade_risk_score DESC, d.hop_depth ASC
+) sub
+ORDER BY sub.cascade_risk_score DESC, sub.hop_depth ASC;
 $$;
 
 -- ----------------------------------------------------------------------------
