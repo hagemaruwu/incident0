@@ -34,7 +34,7 @@ FROM services s
 JOIN incidents i ON s.service_id = i.service_id
 WHERE i.severity IN ('P1', 'P2')
 GROUP BY s.service_id, s.service_name, s.owner_team
-HAVING COUNT(i.incident_id) >= 1
+HAVING COUNT(i.incident_id) >= 2
 ORDER BY high_severity_incidents DESC;
     `.trim(),
   },

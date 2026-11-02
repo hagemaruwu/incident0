@@ -68,12 +68,17 @@ test('sp_triage_incident: creates incident and deduplicates identical telemetry 
     assert.equal(secondTriage.is_deduplicated, true, 'Second declaration with identical error must deduplicate');
     assert.equal(secondTriage.incident_id, firstTriage.incident_id, 'Deduplicated incident ID must match first incident');
 
-    // 4. Test vector similarity function
+    // 4. Test vector similarity function: best match MUST be INC-2026-0003 (similarity 1.0000), not lowest ID INC-2026-0001
     const vectorSearch = await client.query(
-      `SELECT * FROM fn_find_correlated_root_causes($1::vector, 0.1, 3)`,
-      [testVector]
+      `SELECT * FROM fn_find_correlated_root_causes(
+        (SELECT embedding FROM error_logs WHERE incident_id = 3 LIMIT 1),
+        0.0,
+        1
+      )`
     );
-    assert.ok(Array.isArray(vectorSearch.rows), 'Vector correlation must return array of matches');
+    assert.ok(vectorSearch.rows.length === 1, 'Should return exactly 1 match');
+    assert.equal(vectorSearch.rows[0].incident_number, 'INC-2026-0003', 'Top match must be INC-2026-0003 (not lowest ID)');
+    assert.equal(Number(vectorSearch.rows[0].cosine_similarity), 1.0, 'Exact vector match must yield similarity 1.0000');
 
   } finally {
     // 5. Always rollback to keep demo database 100% clean

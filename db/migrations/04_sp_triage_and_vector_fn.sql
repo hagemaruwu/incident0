@@ -199,7 +199,29 @@ RETURNS TABLE (
 LANGUAGE sql
 STABLE
 AS $$
-    SELECT DISTINCT ON (i.incident_id)
+    WITH knn_matches AS (
+        -- Step 1: Force PostgreSQL to utilize the HNSW index (O(log N))
+        SELECT 
+            el.incident_id,
+            (el.embedding <=> p_query_embedding) AS distance
+        FROM error_logs el
+        WHERE el.embedding IS NOT NULL
+          AND (el.embedding <=> p_query_embedding) <= (1.0 - p_similarity_threshold)
+        ORDER BY el.embedding <=> p_query_embedding ASC
+        LIMIT p_limit * 10
+    ),
+    dedup_incidents AS (
+        -- Step 2: Keep the best match per incident
+        SELECT 
+            incident_id,
+            MIN(distance) AS min_distance
+        FROM knn_matches
+        GROUP BY incident_id
+        ORDER BY min_distance ASC
+        LIMIT p_limit
+    )
+    -- Step 3: Join relational metadata and return sorted by highest similarity
+    SELECT 
         i.incident_id AS matched_incident_id,
         i.incident_number,
         i.title AS incident_title,
@@ -210,14 +232,11 @@ AS $$
         rc.prevention_action_items,
         u.full_name AS resolved_by_engineer,
         rc.time_to_resolve_minutes,
-        ROUND((1 - (el.embedding <=> p_query_embedding))::NUMERIC, 4) AS cosine_similarity
-    FROM error_logs el
-    INNER JOIN incidents i ON el.incident_id = i.incident_id
-    INNER JOIN services s ON i.service_id = s.service_id
-    INNER JOIN root_causes rc ON i.incident_id = rc.incident_id
-    INNER JOIN users u ON rc.resolved_by = u.user_id
-    WHERE el.embedding IS NOT NULL
-      AND (1 - (el.embedding <=> p_query_embedding)) >= p_similarity_threshold
-    ORDER BY i.incident_id, (el.embedding <=> p_query_embedding) ASC
-    LIMIT p_limit;
+        ROUND((1 - d.min_distance)::NUMERIC, 4) AS cosine_similarity
+    FROM dedup_incidents d
+    JOIN incidents i ON d.incident_id = i.incident_id
+    JOIN services s ON i.service_id = s.service_id
+    JOIN root_causes rc ON i.incident_id = rc.incident_id
+    JOIN users u ON rc.resolved_by = u.user_id
+    ORDER BY d.min_distance ASC;
 $$;

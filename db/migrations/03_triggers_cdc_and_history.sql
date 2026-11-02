@@ -15,12 +15,24 @@ BEGIN
 
     -- Automatically stamp mitigated_at / resolved_at on status changes
     IF (TG_OP = 'UPDATE') THEN
-        IF (NEW.status = 'MITIGATED' AND OLD.mitigated_at IS NULL) THEN
-            NEW.mitigated_at := NOW();
-        END IF;
-
-        IF (NEW.status IN ('RESOLVED', 'CLOSED') AND OLD.resolved_at IS NULL) THEN
-            NEW.resolved_at := NOW();
+        -- Reopening clears stale resolution timestamps
+        IF (NEW.status = 'OPEN') THEN
+            NEW.mitigated_at := NULL;
+            NEW.resolved_at := NULL;
+        ELSIF (NEW.status = 'INVESTIGATING') THEN
+            NEW.resolved_at := NULL;
+        ELSIF (NEW.status = 'MITIGATED') THEN
+            NEW.resolved_at := NULL;
+            IF (OLD.mitigated_at IS NULL) THEN
+                NEW.mitigated_at := NOW();
+            END IF;
+        ELSIF (NEW.status IN ('RESOLVED', 'CLOSED')) THEN
+            IF (OLD.resolved_at IS NULL) THEN
+                NEW.resolved_at := NOW();
+            END IF;
+            IF (OLD.mitigated_at IS NULL) THEN
+                NEW.mitigated_at := NOW();
+            END IF;
         END IF;
     END IF;
 
