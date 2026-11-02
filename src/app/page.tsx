@@ -81,14 +81,14 @@ export default function WarRoomDashboard() {
     }
   }
 
-  const active   = incidents.filter(i => ['OPEN', 'INVESTIGATING'].includes(i.status));
-  const p1Active = incidents.filter(i => i.severity === 'P1' && ['OPEN', 'INVESTIGATING'].includes(i.status));
+  const active   = incidents.filter(i => ['OPEN', 'INVESTIGATING', 'MITIGATED'].includes(i.status));
+  const p1Active = incidents.filter(i => i.severity === 'P1' && ['OPEN', 'INVESTIGATING', 'MITIGATED'].includes(i.status));
   const resolved = incidents.filter(i => ['RESOLVED', 'CLOSED'].includes(i.status));
 
   const displayed = incidents.filter(i => {
     if (filter === 'P1')      return i.severity === 'P1';
     if (filter === 'P2')      return i.severity === 'P2';
-    if (filter === 'ACTIVE')  return ['OPEN', 'INVESTIGATING'].includes(i.status);
+    if (filter === 'ACTIVE')  return ['OPEN', 'INVESTIGATING', 'MITIGATED'].includes(i.status);
     if (filter === 'RESOLVED') return ['RESOLVED', 'CLOSED'].includes(i.status);
     return true;
   });

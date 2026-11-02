@@ -12,7 +12,7 @@ export async function GET() {
         s.owner_team,
         s.sla_target_pct,
         s.status,
-        COUNT(CASE WHEN i.status IN ('OPEN', 'INVESTIGATING') THEN 1 END) AS active_incidents_count
+        COUNT(CASE WHEN i.status IN ('OPEN', 'INVESTIGATING', 'MITIGATED') THEN 1 END) AS active_incidents_count
       FROM services s
       LEFT JOIN incidents i ON s.service_id = i.service_id
       GROUP BY s.service_id

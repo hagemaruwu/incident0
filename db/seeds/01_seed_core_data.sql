@@ -78,3 +78,10 @@ INSERT INTO error_logs (incident_id, log_level, source_service, environment, fin
     -- 768-d unit-normalized vector with webhook-signature features:
     (SELECT ('[' || string_agg(CASE WHEN i BETWEEN 20 AND 25 THEN '0.408' ELSE '0.001' END, ',') || ']')::vector(768) FROM generate_series(1, 768) i)
 );
+
+-- Synchronize incident_id serial sequence after inserting seeded IDs
+SELECT setval(
+    pg_get_serial_sequence('incidents', 'incident_id'),
+    COALESCE((SELECT MAX(incident_id) FROM incidents), 1),
+    true
+);

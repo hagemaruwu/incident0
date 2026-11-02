@@ -41,6 +41,25 @@ export function generateDeterministicEmbedding(text: string): number[] {
   for (let i = 0; i < EMBEDDING_DIM; i++) {
     sumSq += vec[i] * vec[i];
   }
+
+  // Fallback for symbol-only / non-alphanumeric text: hash character codes across dimensions
+  if (sumSq === 0 && text.trim().length > 0) {
+    for (let i = 0; i < text.length; i++) {
+      const idx = (text.charCodeAt(i) * 31 + i) % EMBEDDING_DIM;
+      vec[idx] += 1;
+    }
+    sumSq = 0;
+    for (let i = 0; i < EMBEDDING_DIM; i++) {
+      sumSq += vec[i] * vec[i];
+    }
+  }
+
+  // Final fallback for completely empty string ""
+  if (sumSq === 0) {
+    vec[0] = 1.0;
+    sumSq = 1.0;
+  }
+
   const norm = Math.sqrt(sumSq) || 1;
 
   return Array.from(vec, (v) => Number((v / norm).toFixed(6)));

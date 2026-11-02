@@ -73,14 +73,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Status is required' }, { status: 400 });
     }
 
-    await query(`SELECT set_config('incidentzero.current_user_id', $1, true)`, [String(user_id)]);
-
     const result = await query(
-      `UPDATE incidents 
-       SET status = $1, updated_at = NOW() 
-       WHERE incident_id = $2 
-       RETURNING *`,
-      [status, id]
+      `WITH actor_ctx AS (
+         SELECT set_config('incidentzero.current_user_id', $1::text, true)
+       )
+       UPDATE incidents 
+       SET status = $2, updated_at = NOW() 
+       FROM actor_ctx
+       WHERE incident_id = $3 
+       RETURNING incidents.*`,
+      [String(user_id), status, id]
     );
 
     if (result.rows.length === 0) {

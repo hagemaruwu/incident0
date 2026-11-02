@@ -65,7 +65,8 @@ BEGIN
 
     -- 6. If no active incident exists, create a new incident atomically
     IF v_inc_id IS NULL THEN
-        SELECT COALESCE(MAX(i.incident_id), 0) + 1 INTO v_seq_num FROM incidents i;
+        -- Atomically allocate next sequence value across all concurrent sessions
+        v_seq_num := nextval(pg_get_serial_sequence('incidents', 'incident_id'));
         v_inc_num := FORMAT('INC-%s-%s', EXTRACT(YEAR FROM NOW())::INT, LPAD(v_seq_num::TEXT, 4, '0'));
 
         INSERT INTO incidents (

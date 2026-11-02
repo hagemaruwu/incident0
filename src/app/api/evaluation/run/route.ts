@@ -48,11 +48,11 @@ SELECT
     u.full_name,
     u.role,
     COUNT(i.incident_id) AS total_incidents_handled,
-    DENSE_RANK() OVER (ORDER BY COUNT(i.incident_id) DESC) AS workload_rank,
-    ROUND(AVG(i.impact_radius_users) OVER (PARTITION BY u.role), 0) AS role_avg_impact_handled
+    COALESCE(SUM(i.impact_radius_users), 0) AS total_users_impacted,
+    DENSE_RANK() OVER (ORDER BY COUNT(i.incident_id) DESC) AS workload_rank
 FROM users u
 LEFT JOIN incidents i ON u.user_id = i.assigned_to
-GROUP BY u.user_id, u.full_name, u.role, i.impact_radius_users
+GROUP BY u.user_id, u.full_name, u.role
 ORDER BY workload_rank ASC, total_incidents_handled DESC
 LIMIT 6;
     `.trim(),

@@ -19,8 +19,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle PostgreSQL client:', err);
-  process.exit(-1);
+  console.error('[pg.Pool] Unexpected error on idle client (evicted from pool):', err.message);
 });
 
 /**

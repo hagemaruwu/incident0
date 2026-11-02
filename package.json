@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --test test/*.test.mjs"
   },
   "repository": {
     "type": "git",
@@ -20,14 +21,11 @@
   "homepage": "https://github.com/hagemaruwu/incident0#readme",
   "description": "",
   "dependencies": {
-    "clsx": "^2.1.1",
     "dotenv": "^18.0.9",
-    "lucide-react": "^1.66.0",
     "next": "^16.4.3",
     "pg": "^8.23.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "tailwind-merge": "^3.7.0"
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
